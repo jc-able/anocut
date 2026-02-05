@@ -11,11 +11,14 @@ export interface PanelSizes {
 }
 
 export type PanelId = keyof PanelSizes;
+export type RightPanelTab = "properties" | "ai";
 
 interface PanelState {
 	panels: PanelSizes;
+	rightPanelTab: RightPanelTab;
 	setPanel: (panel: PanelId, size: number) => void;
 	setPanels: (sizes: Partial<PanelSizes>) => void;
+	setRightPanelTab: (tab: RightPanelTab) => void;
 	resetPanels: () => void;
 }
 
@@ -23,6 +26,7 @@ export const usePanelStore = create<PanelState>()(
 	persist(
 		(set) => ({
 			...PANEL_CONFIG,
+			rightPanelTab: "properties" as RightPanelTab,
 			setPanel: (panel, size) =>
 				set((state) => ({
 					panels: {
@@ -37,7 +41,8 @@ export const usePanelStore = create<PanelState>()(
 						...sizes,
 					},
 				})),
-			resetPanels: () => set({ ...PANEL_CONFIG }),
+			setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
+			resetPanels: () => set({ ...PANEL_CONFIG, rightPanelTab: "properties" }),
 		}),
 		{
 			name: "panel-sizes",

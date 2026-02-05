@@ -18,6 +18,7 @@ import { ThemeToggle } from "../theme-toggle";
 import { toast } from "sonner";
 import { useEditor } from "@/hooks/use-editor";
 import { useAIEditorStore } from "@/stores/ai-editor-store";
+import { usePanelStore } from "@/stores/panel-store";
 import { Badge } from "../ui/badge";
 import {
 	ArrowLeft02Icon,
@@ -28,13 +29,14 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "./dialogs/shortcuts-dialog";
 
-interface EditorHeaderProps {
-	onOpenAIEditor?: () => void;
-}
-
-export function EditorHeader({ onOpenAIEditor }: EditorHeaderProps) {
+export function EditorHeader() {
 	const aiEdits = useAIEditorStore((s) => s.aiEdits);
-	const analysis = useAIEditorStore((s) => s.analysis);
+	const { rightPanelTab, setRightPanelTab } = usePanelStore();
+
+	const handleAIEditorClick = () => {
+		// Toggle AI panel - if already on AI tab, switch to properties, otherwise switch to AI
+		setRightPanelTab(rightPanelTab === "ai" ? "properties" : "ai");
+	};
 
 	return (
 		<header className="bg-background flex h-[3.2rem] items-center justify-between px-3 pt-0.5">
@@ -44,16 +46,16 @@ export function EditorHeader({ onOpenAIEditor }: EditorHeaderProps) {
 			<nav className="flex items-center gap-2">
 				{/* AI Editor Button */}
 				<Button
-					variant="outline"
+					variant={rightPanelTab === "ai" ? "default" : "outline"}
 					size="sm"
-					onClick={onOpenAIEditor}
+					onClick={handleAIEditorClick}
 					className="gap-2 relative"
 				>
 					<Sparkles className="size-4" />
 					AI Editor
 					{aiEdits.length > 0 && (
 						<Badge
-							variant="default"
+							variant={rightPanelTab === "ai" ? "secondary" : "default"}
 							className="absolute -top-1.5 -right-1.5 h-5 w-5 p-0 flex items-center justify-center text-[10px]"
 						>
 							{aiEdits.length}

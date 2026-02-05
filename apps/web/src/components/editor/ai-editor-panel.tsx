@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useAIEditorStore } from "@/stores/ai-editor-store";
+import { hasElevenLabsKey } from "@/services/ai/elevenlabs";
 import { CommandTerminal } from "./command-terminal";
-import { AnnotationTimeline } from "./annotation-timeline";
 import { TranscriptPanel } from "./transcript-panel";
 import { AnalysisProgress } from "./analysis-progress";
 import { AISettingsDialog } from "./dialogs/ai-settings-dialog";
@@ -17,15 +17,17 @@ import {
   Undo2,
   Redo2,
   Trash2,
-  Play,
-  Upload,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
+  MessageSquare,
+  FileText,
 } from "lucide-react";
 
 interface AIEditorPanelProps {
   className?: string;
   currentTime?: number;
   onSeek?: (time: number) => void;
-  onAnalyzeVideo?: (file: File) => void;
   videoFile?: File | null;
 }
 
@@ -33,17 +35,17 @@ export function AIEditorPanel({
   className,
   currentTime = 0,
   onSeek,
-  onAnalyzeVideo,
   videoFile,
 }: AIEditorPanelProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("commands");
+  const [hasElevenLabs, setHasElevenLabs] = useState(false);
 
   const {
     analysis,
     isAnalyzing,
     aiEdits,
-    hasApiKey,
+    hasApiKey: hasGoogleApiKey,
     startAnalysis,
     clearEdits,
     undo,
@@ -52,6 +54,13 @@ export function AIEditorPanel({
 
   const canUndo = useAIEditorStore((s) => s.undoStack.length > 0);
   const canRedo = useAIEditorStore((s) => s.redoStack.length > 0);
+
+  // Check for ElevenLabs API key on mount and when settings close
+  useEffect(() => {
+    setHasElevenLabs(hasElevenLabsKey());
+  }, [settingsOpen]);
+
+  const hasRequiredKeys = hasGoogleApiKey && hasElevenLabs;
 
   const handleAnalyze = useCallback(async () => {
     if (videoFile) {
@@ -66,7 +75,7 @@ export function AIEditorPanel({
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
           <span className="font-medium text-sm">AI Editor</span>
-          {analysis && (
+          {analysis && aiEdits.length > 0 && (
             <Badge variant="secondary" className="text-xs">
               {aiEdits.length} edits
             </Badge>
@@ -78,22 +87,22 @@ export function AIEditorPanel({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-7"
             onClick={undo}
             disabled={!canUndo}
             title="Undo"
           >
-            <Undo2 className="size-4" />
+            <Undo2 className="size-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-7"
             onClick={redo}
             disabled={!canRedo}
             title="Redo"
           >
-            <Redo2 className="size-4" />
+            <Redo2 className="size-3.5" />
           </Button>
 
           {/* Clear edits */}
@@ -101,11 +110,11 @@ export function AIEditorPanel({
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 text-red-500 hover:text-red-600"
+              className="size-7 text-red-500 hover:text-red-600"
               onClick={clearEdits}
               title="Clear all edits"
             >
-              <Trash2 className="size-4" />
+              <Trash2 className="size-3.5" />
             </Button>
           )}
 
@@ -113,69 +122,110 @@ export function AIEditorPanel({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-7"
             onClick={() => setSettingsOpen(true)}
             title="AI Settings"
           >
-            <Settings className="size-4" />
+            <Settings className="size-3.5" />
           </Button>
         </div>
       </div>
 
-      {/* Analysis status/trigger */}
-      {hasApiKey && !analysis && !isAnalyzing && videoFile && (
+      {/* API Keys Required */}
+      {!hasRequiredKeys && !isAnalyzing && (
         <div className="p-4 border-b">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="size-5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium mb-2">API Keys Required</p>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center gap-2">
+                  {hasGoogleApiKey ? (
+                    <CheckCircle className="size-3.5 text-green-500" />
+                  ) : (
+                    <XCircle className="size-3.5 text-red-500" />
+                  )}
+                  <span className={hasGoogleApiKey ? "text-muted-foreground" : ""}>
+                    Google AI (visuals)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasElevenLabs ? (
+                    <CheckCircle className="size-3.5 text-green-500" />
+                  ) : (
+                    <XCircle className="size-3.5 text-red-500" />
+                  )}
+                  <span className={hasElevenLabs ? "text-muted-foreground" : ""}>
+                    ElevenLabs (audio)
+                  </span>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings className="size-3.5 mr-2" />
+                Configure Keys
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Video */}
+      {hasRequiredKeys && !videoFile && !analysis && !isAnalyzing && (
+        <div className="p-4 border-b text-center text-muted-foreground">
+          <p className="text-sm">Import a video to use AI analysis</p>
+        </div>
+      )}
+
+      {/* Analysis trigger */}
+      {hasRequiredKeys && !analysis && !isAnalyzing && videoFile && (
+        <div className="p-3 border-b">
           <Button
             onClick={handleAnalyze}
             className="w-full"
-            variant="outline"
+            size="sm"
           >
             <Sparkles className="size-4 mr-2" />
-            Analyze Video with AI
+            Analyze Video
           </Button>
-          <p className="text-xs text-muted-foreground text-center mt-2">
-            AI will detect speech, silence, filler words, and scene changes
+          <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+            Detects speech, fillers, silence, and scene changes
           </p>
         </div>
       )}
 
       {/* Analysis progress */}
-      {(isAnalyzing || analysis) && (
+      {isAnalyzing && (
         <div className="p-3 border-b">
           <AnalysisProgress />
         </div>
       )}
 
-      {/* Main content */}
+      {/* Main content - Commands & Transcript */}
       <div className="flex-1 overflow-hidden">
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
           className="h-full flex flex-col"
         >
-          <TabsList className="w-full justify-start rounded-none border-b px-2 h-10">
-            <TabsTrigger value="commands" className="text-xs">
+          <TabsList className="w-full justify-start rounded-none border-b px-2 h-9 bg-transparent">
+            <TabsTrigger value="commands" className="text-xs gap-1.5 data-[state=active]:bg-muted">
+              <MessageSquare className="size-3.5" />
               Commands
             </TabsTrigger>
-            <TabsTrigger value="transcript" className="text-xs">
+            <TabsTrigger value="transcript" className="text-xs gap-1.5 data-[state=active]:bg-muted">
+              <FileText className="size-3.5" />
               Transcript
               {analysis && analysis.transcript.length > 0 && (
                 <Badge
                   variant="secondary"
-                  className="ml-1 text-[10px] px-1 py-0"
+                  className="ml-1 text-[10px] px-1 py-0 h-4"
                 >
                   {analysis.transcript.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="text-xs">
-              Timeline
-              {analysis && analysis.annotations.length > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 text-[10px] px-1 py-0"
-                >
-                  {analysis.annotations.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -187,10 +237,6 @@ export function AIEditorPanel({
 
           <TabsContent value="transcript" className="flex-1 m-0 overflow-hidden">
             <TranscriptPanel currentTime={currentTime} onSeek={onSeek} />
-          </TabsContent>
-
-          <TabsContent value="timeline" className="flex-1 m-0 overflow-auto">
-            <AnnotationTimeline currentTime={currentTime} onSeek={onSeek} />
           </TabsContent>
         </Tabs>
       </div>

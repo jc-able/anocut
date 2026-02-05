@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PropertiesPanel } from "./properties";
 import { AIEditorPanel } from "../ai-editor-panel";
 import { useAIEditorStore } from "@/stores/ai-editor-store";
+import { usePanelStore } from "@/stores/panel-store";
 import { useEditor } from "@/hooks/use-editor";
 import { Badge } from "@/components/ui/badge";
 import { Settings, Sparkles } from "lucide-react";
 
 export function RightPanel() {
-  const [activeTab, setActiveTab] = useState<"properties" | "ai">("properties");
+  const { rightPanelTab, setRightPanelTab } = usePanelStore();
   const aiEdits = useAIEditorStore((s) => s.aiEdits);
   const editor = useEditor();
 
@@ -32,8 +33,8 @@ export function RightPanel() {
   return (
     <div className="bg-panel flex h-full flex-col rounded-sm overflow-hidden">
       <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as "properties" | "ai")}
+        value={rightPanelTab}
+        onValueChange={(v) => setRightPanelTab(v as "properties" | "ai")}
         className="flex h-full flex-col"
       >
         <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-2 h-10 shrink-0">

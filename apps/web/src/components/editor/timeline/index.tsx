@@ -53,6 +53,7 @@ import { useTimelinePlayhead } from "@/hooks/timeline/use-timeline-playhead";
 import { DragLine } from "./drag-line";
 import { invokeAction } from "@/lib/actions";
 import { AIEditSummaryBar } from "./ai-cut-preview";
+import { AIAnnotationsTrack } from "./ai-annotations-track";
 
 export function Timeline() {
 	const tracksContainerHeight = { min: 0, max: 800 };
@@ -370,6 +371,10 @@ export function Timeline() {
 										handleTimelineContentClick={handleRulerClick}
 										handleRulerTrackingMouseDown={handleRulerMouseDown}
 										handleRulerMouseDown={handlePlayheadRulerMouseDown}
+									/>
+									<AIAnnotationsTrack
+										zoomLevel={zoomLevel}
+										dynamicTimelineWidth={dynamicTimelineWidth}
 									/>
 									<AIEditSummaryBar
 										zoomLevel={zoomLevel}
