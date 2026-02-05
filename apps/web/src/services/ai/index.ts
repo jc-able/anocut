@@ -27,3 +27,14 @@ export {
   tryQuickCommand,
   QUICK_COMMANDS,
 } from "./command-interpreter";
+
+// Preview Generator
+export {
+  generatePreviewTimeline,
+  originalToPreviewTime,
+  previewToOriginalTime,
+  isTimeCut,
+  getCutAtTime,
+  calculateEditSavings,
+} from "./preview-generator";
+export type { TimeSegment, PreviewTimeline } from "./preview-generator";
