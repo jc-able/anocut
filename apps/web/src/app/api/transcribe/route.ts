@@ -212,22 +212,53 @@ function transformElevenLabsResponse(response: ElevenLabsResponse): TransformedR
         confidence: logprobToConfidence(item.logprob),
         speakerId: item.speaker_id,
       });
+    } else if (item.type === "punctuation") {
+      // Append punctuation to the previous word for sentence boundary detection
+      const lastWord = speechWords[speechWords.length - 1];
+      if (lastWord) {
+        lastWord.word += item.text;
+        // Extend the end time to include punctuation
+        if (item.end) {
+          lastWord.endTime = item.end;
+        }
+      }
     }
-    // Skip "spacing" and "punctuation" types
+    // Skip "spacing" type
   }
 
-  // Group words into segments by speaker changes and pauses
+  // Group words into segments with smart boundaries
+  // Segment on: sentence endings, speaker changes, pauses, or max duration/length
+  const MAX_SEGMENT_DURATION = 12; // seconds
+  const MAX_SEGMENT_WORDS = 30;
+  const PAUSE_THRESHOLD = 0.8; // seconds - shorter pause threshold
+
   const segments: TransformedSegment[] = [];
   let currentWords: TransformedWord[] = [];
 
   for (const word of speechWords) {
     const prev = currentWords[currentWords.length - 1];
 
-    // Start new segment on speaker change or pause > 1 second
-    const isPause = prev && (word.startTime - prev.endTime > 1.0);
-    const isNewSpeaker = prev && (prev.speakerId !== word.speakerId);
+    // Calculate current segment stats
+    const segmentStart = currentWords.length > 0 ? currentWords[0].startTime : word.startTime;
+    const segmentDuration = prev ? prev.endTime - segmentStart : 0;
 
-    if ((isPause || isNewSpeaker) && currentWords.length > 0) {
+    // Determine if we should start a new segment
+    const isPause = prev && (word.startTime - prev.endTime > PAUSE_THRESHOLD);
+    const isNewSpeaker = prev && (prev.speakerId !== word.speakerId);
+    const isSentenceEnd = prev && /[.!?]$/.test(prev.word.trim());
+    const isMaxDuration = segmentDuration >= MAX_SEGMENT_DURATION;
+    const isMaxWords = currentWords.length >= MAX_SEGMENT_WORDS;
+
+    // Start new segment on meaningful boundaries
+    const shouldSplit = currentWords.length > 0 && (
+      isNewSpeaker ||
+      (isPause && currentWords.length >= 3) || // Pause with some content
+      (isSentenceEnd && (segmentDuration >= 3 || currentWords.length >= 8)) || // Sentence end with reasonable length
+      isMaxDuration ||
+      isMaxWords
+    );
+
+    if (shouldSplit) {
       segments.push(createSegment(currentWords));
       currentWords = [];
     }
