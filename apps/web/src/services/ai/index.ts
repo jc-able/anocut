@@ -38,3 +38,20 @@ export {
   calculateEditSavings,
 } from "./preview-generator";
 export type { TimeSegment, PreviewTimeline } from "./preview-generator";
+
+// ElevenLabs Transcription
+export {
+  hasElevenLabsKey,
+  getElevenLabsKey,
+  setElevenLabsKey,
+  removeElevenLabsKey,
+  transcribeVideo,
+  transcribeWithElevenLabs,
+  extractAudioFromVideo,
+  convertToStandardTranscript,
+} from "./elevenlabs";
+export type {
+  ElevenLabsTranscriptSegment,
+  ElevenLabsAudioEvent,
+  ElevenLabsTranscriptionResult,
+} from "./elevenlabs";
