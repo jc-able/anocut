@@ -21,7 +21,7 @@ import {
   MessageSquare,
   Volume2,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/ui";
 import { VoiceCommandButton, VoiceRecordingIndicator } from "./voice-command-button";
 import { useVoiceCommand } from "@/hooks/use-voice-command";
 

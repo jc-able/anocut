@@ -16,7 +16,7 @@ import type { AIModel } from "@/types/ai";
 
 const STORAGE_KEY = "anocut_google_api_key";
 const MODEL_STORAGE_KEY = "anocut_ai_model";
-const DEFAULT_MODEL: AIModel = "gemini-2.0-flash";
+const DEFAULT_MODEL: AIModel = "gemini-3-flash-preview";
 
 // ============================================================================
 // Client Singleton
@@ -233,8 +233,13 @@ export async function validateApiKey(apiKey: string): Promise<boolean> {
 export function getSelectedModel(): AIModel {
   if (typeof window === "undefined") return DEFAULT_MODEL;
   const stored = localStorage.getItem(MODEL_STORAGE_KEY);
-  if (stored === "gemini-2.0-flash" || stored === "gemini-2.0-pro") {
-    return stored;
+  const validModels: AIModel[] = [
+    "gemini-3-flash-preview",
+    "gemini-3-pro-preview",
+    "gemini-2.5-flash",
+  ];
+  if (stored && validModels.includes(stored as AIModel)) {
+    return stored as AIModel;
   }
   return DEFAULT_MODEL;
 }

@@ -100,7 +100,7 @@ export const useAIEditorStore = create<AIEditorState>()(
       commandHistory: [],
 
       hasApiKey: typeof window !== "undefined" ? hasApiKey() : false,
-      selectedModel: typeof window !== "undefined" ? getSelectedModel() : "gemini-2.0-flash",
+      selectedModel: typeof window !== "undefined" ? getSelectedModel() : "gemini-3-flash-preview",
 
       // Analysis actions
       startAnalysis: async (videoFile: File) => {

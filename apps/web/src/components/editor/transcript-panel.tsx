@@ -4,7 +4,7 @@ import { useRef, useEffect, useMemo } from "react";
 import { useAIEditorStore } from "@/stores/ai-editor-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/ui";
 import { FileText, User, AlertCircle } from "lucide-react";
 
 interface TranscriptPanelProps {

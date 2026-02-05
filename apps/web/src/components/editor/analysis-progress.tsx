@@ -3,7 +3,7 @@
 import { useAIEditorStore } from "@/stores/ai-editor-store";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/ui";
 import {
   Loader2,
   CheckCircle,

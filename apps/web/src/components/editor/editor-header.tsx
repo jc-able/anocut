@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "../ui/button";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { useState } from "react";
 import {
 	DropdownMenu,
@@ -17,6 +17,8 @@ import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
 import { toast } from "sonner";
 import { useEditor } from "@/hooks/use-editor";
+import { useAIEditorStore } from "@/stores/ai-editor-store";
+import { Badge } from "../ui/badge";
 import {
 	ArrowLeft02Icon,
 	Edit03Icon,
@@ -26,13 +28,38 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "./dialogs/shortcuts-dialog";
 
-export function EditorHeader() {
+interface EditorHeaderProps {
+	onOpenAIEditor?: () => void;
+}
+
+export function EditorHeader({ onOpenAIEditor }: EditorHeaderProps) {
+	const aiEdits = useAIEditorStore((s) => s.aiEdits);
+	const analysis = useAIEditorStore((s) => s.analysis);
+
 	return (
 		<header className="bg-background flex h-[3.2rem] items-center justify-between px-3 pt-0.5">
 			<div className="flex items-center gap-2">
 				<ProjectDropdown />
 			</div>
 			<nav className="flex items-center gap-2">
+				{/* AI Editor Button */}
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={onOpenAIEditor}
+					className="gap-2 relative"
+				>
+					<Sparkles className="size-4" />
+					AI Editor
+					{aiEdits.length > 0 && (
+						<Badge
+							variant="default"
+							className="absolute -top-1.5 -right-1.5 h-5 w-5 p-0 flex items-center justify-center text-[10px]"
+						>
+							{aiEdits.length}
+						</Badge>
+					)}
+				</Button>
 				<ExportButton />
 				<ThemeToggle />
 			</nav>

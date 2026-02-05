@@ -4,7 +4,7 @@ import { useAIExport, formatDuration } from "@/hooks/use-ai-export";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/ui";
 import { Sparkles, Scissors, Clock, TrendingDown } from "lucide-react";
 
 interface AIExportSummaryProps {

@@ -162,7 +162,7 @@ export interface QuickCommand {
 // AI Settings Types
 // ============================================================================
 
-export type AIModel = "gemini-2.0-flash" | "gemini-2.0-pro";
+export type AIModel = "gemini-3-flash-preview" | "gemini-3-pro-preview" | "gemini-2.5-flash";
 
 export interface AISettings {
   googleApiKey: string | null;
@@ -172,15 +172,21 @@ export interface AISettings {
 
 export const AI_MODELS: Record<AIModel, { name: string; description: string }> =
   {
-    "gemini-2.0-flash": {
-      name: "Gemini 2.0 Flash",
-      description: "Fast and efficient for most tasks",
+    "gemini-3-flash-preview": {
+      name: "Gemini 3 Flash",
+      description: "Latest - pro-level intelligence, fast and affordable",
     },
-    "gemini-2.0-pro": {
-      name: "Gemini 2.0 Pro",
-      description: "Higher quality, slower processing",
+    "gemini-3-pro-preview": {
+      name: "Gemini 3 Pro",
+      description: "Flagship model for complex reasoning",
+    },
+    "gemini-2.5-flash": {
+      name: "Gemini 2.5 Flash",
+      description: "Stable version, fast processing",
     },
   };
+
+export const DEFAULT_AI_MODEL: AIModel = "gemini-3-flash-preview";
 
 // ============================================================================
 // Filler Words

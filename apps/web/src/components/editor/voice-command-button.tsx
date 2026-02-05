@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useVoiceCommand } from "@/hooks/use-voice-command";
-import { cn } from "@/lib/utils";
+import { cn } from "@/utils/ui";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 
 interface VoiceCommandButtonProps {

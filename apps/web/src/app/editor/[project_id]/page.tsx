@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import {
 	ResizablePanelGroup,
@@ -14,21 +15,28 @@ import { EditorHeader } from "@/components/editor/editor-header";
 import { EditorProvider } from "@/components/providers/editor-provider";
 import { Onboarding } from "@/components/editor/onboarding";
 import { MigrationDialog } from "@/components/editor/dialogs/migration-dialog";
+import { AIEditorWorkspace } from "@/components/editor/ai-editor-workspace";
 import { usePanelStore } from "@/stores/panel-store";
 
 export default function Editor() {
 	const params = useParams();
 	const projectId = params.project_id as string;
+	const [isAIEditorOpen, setIsAIEditorOpen] = useState(false);
 
 	return (
 		<EditorProvider projectId={projectId}>
 			<div className="bg-background flex h-screen w-screen flex-col overflow-hidden">
-				<EditorHeader />
+				<EditorHeader onOpenAIEditor={() => setIsAIEditorOpen(true)} />
 				<div className="min-h-0 min-w-0 flex-1">
 					<EditorLayout />
 				</div>
 				<Onboarding />
 				<MigrationDialog />
+
+				{/* AI Editor Full-Screen Workspace */}
+				{isAIEditorOpen && (
+					<AIEditorWorkspace onClose={() => setIsAIEditorOpen(false)} />
+				)}
 			</div>
 		</EditorProvider>
 	);
