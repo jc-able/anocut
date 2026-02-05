@@ -10,14 +10,11 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import Link from "next/link";
 import { RenameProjectDialog } from "./dialogs/rename-project-dialog";
 import { DeleteProjectDialog } from "./dialogs/delete-project-dialog";
 import { useRouter } from "next/navigation";
-import { FaDiscord } from "react-icons/fa6";
 import { ExportButton } from "./export-button";
 import { ThemeToggle } from "../theme-toggle";
-import { SOCIAL_LINKS } from "@/constants/site-constants";
 import { toast } from "sonner";
 import { useEditor } from "@/hooks/use-editor";
 import {
@@ -152,17 +149,6 @@ function ProjectDropdown() {
 					>
 						<HugeiconsIcon icon={CommandIcon} className="size-4" />
 						Keyboard shortcuts
-					</DropdownMenuItem>
-					<DropdownMenuItem asChild>
-						<Link
-							href={SOCIAL_LINKS.discord}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="flex items-center gap-1.5"
-						>
-							<FaDiscord className="size-4" />
-							Discord
-						</Link>
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
