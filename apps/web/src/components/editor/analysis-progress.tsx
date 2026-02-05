@@ -11,6 +11,8 @@ import {
   Film,
   Sparkles,
   FileSearch,
+  Mic,
+  Upload,
 } from "lucide-react";
 
 interface AnalysisProgressProps {
@@ -20,6 +22,8 @@ interface AnalysisProgressProps {
 const STAGE_ICONS: Record<string, React.ReactNode> = {
   idle: <Film className="size-5" />,
   extracting: <FileSearch className="size-5 animate-pulse" />,
+  uploading: <Upload className="size-5 animate-pulse" />,
+  transcribing: <Mic className="size-5 animate-pulse" />,
   analyzing: <Sparkles className="size-5 animate-pulse" />,
   complete: <CheckCircle className="size-5 text-green-500" />,
   error: <XCircle className="size-5 text-red-500" />,
@@ -28,7 +32,9 @@ const STAGE_ICONS: Record<string, React.ReactNode> = {
 const STAGE_LABELS: Record<string, string> = {
   idle: "Ready to analyze",
   extracting: "Extracting frames...",
-  analyzing: "AI analyzing content...",
+  uploading: "Uploading...",
+  transcribing: "Transcribing audio with ElevenLabs...",
+  analyzing: "AI analyzing visuals...",
   complete: "Analysis complete",
   error: "Analysis failed",
 };
@@ -49,16 +55,17 @@ export function AnalysisProgress({ className }: AnalysisProgressProps) {
         "rounded-lg border p-4",
         stage === "error" && "border-red-500/50 bg-red-500/5",
         stage === "complete" && "border-green-500/50 bg-green-500/5",
-        (stage === "extracting" || stage === "analyzing") &&
+        stage === "transcribing" && "border-blue-500/50 bg-blue-500/5",
+        (stage === "extracting" || stage === "analyzing" || stage === "uploading") &&
           "border-primary/50 bg-primary/5",
         className
       )}
     >
       <div className="flex items-start gap-3">
-        <div className="mt-0.5">{STAGE_ICONS[stage]}</div>
+        <div className="mt-0.5">{STAGE_ICONS[stage] || <Loader2 className="size-5 animate-spin" />}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium text-sm">{STAGE_LABELS[stage]}</p>
+            <p className="font-medium text-sm">{STAGE_LABELS[stage] || stage}</p>
             {isAnalyzing && (
               <Loader2 className="size-4 animate-spin text-muted-foreground" />
             )}
@@ -68,7 +75,7 @@ export function AnalysisProgress({ className }: AnalysisProgressProps) {
             <p className="text-sm text-muted-foreground mt-1">{message}</p>
           )}
 
-          {(stage === "extracting" || stage === "analyzing") && (
+          {(stage === "extracting" || stage === "analyzing" || stage === "transcribing" || stage === "uploading") && (
             <Progress value={progress} className="mt-2 h-1" />
           )}
 

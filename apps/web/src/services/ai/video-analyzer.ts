@@ -1,16 +1,27 @@
 /**
  * Video Analyzer Service
- * Analyzes video content using Google Gemini to extract annotations and transcript
+ * Analyzes video content using:
+ * - ElevenLabs Scribe for audio transcription (word-level timestamps, speaker diarization)
+ * - Google Gemini for visual analysis (scene changes, visual content)
  */
 
 import { getGoogleAIClient } from "./google-ai";
+import {
+  hasElevenLabsKey,
+  extractAudioFromVideo,
+  transcribeWithElevenLabs,
+  convertToStandardTranscript,
+  type ElevenLabsTranscriptionResult,
+} from "./elevenlabs";
 import type {
   VideoAnalysis,
   Annotation,
   TranscriptSegment,
   AnalysisProgress,
+  AudioEvent,
 } from "@/types/ai";
 import { nanoid } from "nanoid";
+import { isFillerWord } from "@/types/ai";
 
 // ============================================================================
 // Constants
@@ -26,50 +37,35 @@ const MAX_FRAME_WIDTH = 720;
 // Analysis Prompts
 // ============================================================================
 
-const ANALYSIS_SYSTEM_PROMPT = `You are a video analysis AI. Analyze the provided video frames and audio context to identify:
+// Visual-only analysis prompt - Gemini only handles visual content
+const VISUAL_ANALYSIS_PROMPT = `You are a video analysis AI. Analyze the provided video frames to identify VISUAL content only.
 
-1. TRANSCRIPT: Transcribe any spoken words with timestamps
-2. ANNOTATIONS: Identify segments of different types:
-   - "talking": When someone is speaking
-   - "silence": Gaps with no speech (> 0.5 seconds)
-   - "filler": Filler words (um, uh, like, you know, etc.)
-   - "scene": Visual scene changes
-   - "music": Background music detected
-   - "noise": Non-speech audio
+ANALYZE:
+1. SCENE CHANGES: When the visual scene/shot changes significantly
+2. VISUAL SUMMARY: Brief description of what's happening visually
+
+DO NOT attempt to transcribe audio - that is handled by a separate audio service.
+
+ANNOTATIONS to identify:
+- "scene": Visual scene changes, shot transitions, or significant visual changes
 
 CRITICAL RULES:
 1. All timestamps must be in SECONDS (e.g., 2.5 not 2500)
 2. Timestamps must be within the video duration bounds
 3. Every annotation needs startTime < endTime
-4. TRANSCRIPT = SPOKEN AUDIO ONLY. Transcribe what you HEAR people saying
-5. Mark filler word segments with isFiller: true in transcript
-6. Be precise with timing - use the frame timestamps as reference
+4. Be precise with timing - use the frame timestamps as reference
+5. Focus on VISUAL information only - no audio transcription
 
 OUTPUT FORMAT:
 Return a JSON object matching the schema provided.`;
 
-const VIDEO_ANALYSIS_SCHEMA = {
+// Schema for visual-only analysis - Gemini handles visuals, ElevenLabs handles audio
+const VISUAL_ANALYSIS_SCHEMA = {
   type: "object",
   properties: {
-    duration: {
-      type: "number",
-      description: "Total video duration in seconds",
-    },
     summary: {
       type: "string",
-      description: "Brief summary of the video content",
-    },
-    detectedSpeakers: {
-      type: "number",
-      description: "Number of distinct speakers detected",
-    },
-    fillerWordCount: {
-      type: "number",
-      description: "Total count of filler words detected",
-    },
-    silenceGapCount: {
-      type: "number",
-      description: "Number of silence gaps detected",
+      description: "Brief visual summary of the video content",
     },
     sceneChangeCount: {
       type: "number",
@@ -83,7 +79,7 @@ const VIDEO_ANALYSIS_SCHEMA = {
           id: { type: "string" },
           type: {
             type: "string",
-            enum: ["talking", "silence", "scene", "filler", "noise", "music"],
+            enum: ["scene"],
           },
           startTime: { type: "number" },
           endTime: { type: "number" },
@@ -93,32 +89,8 @@ const VIDEO_ANALYSIS_SCHEMA = {
         required: ["id", "type", "startTime", "endTime", "confidence"],
       },
     },
-    transcript: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          startTime: { type: "number" },
-          endTime: { type: "number" },
-          text: { type: "string" },
-          speaker: { type: "string" },
-          isFiller: { type: "boolean" },
-        },
-        required: ["id", "startTime", "endTime", "text"],
-      },
-    },
   },
-  required: [
-    "duration",
-    "summary",
-    "annotations",
-    "transcript",
-    "detectedSpeakers",
-    "fillerWordCount",
-    "silenceGapCount",
-    "sceneChangeCount",
-  ],
+  required: ["summary", "annotations", "sceneChangeCount"],
 };
 
 // ============================================================================
@@ -256,7 +228,8 @@ function createChunks(
 }
 
 /**
- * Analyze a single chunk of frames
+ * Analyze a single chunk of frames for visual content only
+ * Audio transcription is handled separately by ElevenLabs
  */
 async function analyzeChunk(
   chunk: FrameChunk,
@@ -266,7 +239,7 @@ async function analyzeChunk(
 ): Promise<Partial<VideoAnalysis>> {
   const client = getGoogleAIClient();
 
-  const chunkPrompt = `${ANALYSIS_SYSTEM_PROMPT}
+  const chunkPrompt = `${VISUAL_ANALYSIS_PROMPT}
 
 VIDEO CONTEXT:
 - Total video duration: ${videoDuration} seconds
@@ -274,12 +247,12 @@ VIDEO CONTEXT:
 - Chunk time range: ${chunk.startTime.toFixed(2)}s to ${chunk.endTime.toFixed(2)}s
 - Frame timestamps: ${chunk.timestamps.map((t) => t.toFixed(2) + "s").join(", ")}
 
-Analyze these ${chunk.frames.length} frames and provide annotations and transcript for this time range only.`;
+Analyze these ${chunk.frames.length} frames and provide visual annotations (scene changes) for this time range only.`;
 
   const result = await client.analyzeFramesJSON<Partial<VideoAnalysis>>(
     chunk.frames,
     chunkPrompt,
-    VIDEO_ANALYSIS_SCHEMA
+    VISUAL_ANALYSIS_SCHEMA
   );
 
   // Ensure all IDs are unique by prefixing with chunk index
@@ -287,13 +260,6 @@ Analyze these ${chunk.frames.length} frames and provide annotations and transcri
     result.annotations = result.annotations.map((a) => ({
       ...a,
       id: a.id || `${chunkIndex}-${nanoid(8)}`,
-    }));
-  }
-
-  if (result.transcript) {
-    result.transcript = result.transcript.map((t) => ({
-      ...t,
-      id: t.id || `${chunkIndex}-${nanoid(8)}`,
     }));
   }
 
@@ -356,6 +322,7 @@ export type ProgressCallback = (progress: AnalysisProgress) => void;
 
 /**
  * Analyze a video file and return structured analysis
+ * Requires ElevenLabs for audio transcription + Gemini for visual analysis
  */
 export async function analyzeVideo(
   videoFile: File,
@@ -369,14 +336,23 @@ export async function analyzeVideo(
     onProgress?.({ stage, progress, message });
   };
 
+  // Check for ElevenLabs API key - required for transcription
+  if (!hasElevenLabsKey()) {
+    const error = new Error(
+      "ElevenLabs API key is required for audio transcription. Please configure your ElevenLabs API key in Settings."
+    );
+    updateProgress("error", 0, error.message);
+    throw error;
+  }
+
   try {
-    // Stage 1: Extract frames
+    // Stage 1: Extract frames for visual analysis
     updateProgress("extracting", 0, "Loading video...");
 
     const video = await createVideoElement(videoFile);
     const duration = video.duration;
 
-    updateProgress("extracting", 20, "Extracting frames...");
+    updateProgress("extracting", 10, "Extracting frames for visual analysis...");
 
     const { frames, timestamps } = await extractFrames(video, {
       framesPerSecond: FRAMES_PER_SECOND,
@@ -385,17 +361,36 @@ export async function analyzeVideo(
       maxWidth: MAX_FRAME_WIDTH,
     });
 
-    updateProgress(
-      "extracting",
-      40,
-      `Extracted ${frames.length} frames`
-    );
+    updateProgress("extracting", 25, `Extracted ${frames.length} frames`);
 
     // Clean up video element
     URL.revokeObjectURL(video.src);
 
-    // Stage 2: Analyze frames
-    updateProgress("analyzing", 50, "Analyzing video content...");
+    // Stage 2: Transcription with ElevenLabs
+    updateProgress("transcribing", 30, "Extracting audio for transcription...");
+
+    let elevenLabsResult: ElevenLabsTranscriptionResult;
+
+    try {
+      const audioBlob = await extractAudioFromVideo(videoFile);
+
+      updateProgress("transcribing", 40, "Transcribing with ElevenLabs Scribe...");
+
+      elevenLabsResult = await transcribeWithElevenLabs(audioBlob, {
+        onProgress: (msg) => updateProgress("transcribing", 45, msg),
+      });
+
+      updateProgress("transcribing", 55, "Transcription complete");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Transcription failed";
+      updateProgress("error", 0, `ElevenLabs transcription failed: ${errorMessage}`);
+      throw new Error(`ElevenLabs transcription failed: ${errorMessage}`);
+    }
+
+    // Stage 3: Visual analysis with Gemini
+    updateProgress("analyzing", 60, "Analyzing video visuals with AI...");
+
+    let visualAnalysis: VideoAnalysis;
 
     // For short videos (< 30 frames), analyze in one go
     if (frames.length <= MAX_FRAMES_PER_CHUNK) {
@@ -408,48 +403,200 @@ export async function analyzeVideo(
 
       const result = await analyzeChunk(chunk, 0, 1, duration);
 
-      updateProgress("complete", 100, "Analysis complete");
-
-      return {
+      visualAnalysis = {
         duration,
         summary: result.summary || "Video analysis complete",
         annotations: (result.annotations as Annotation[]) || [],
-        transcript: (result.transcript as TranscriptSegment[]) || [],
-        detectedSpeakers: result.detectedSpeakers || 1,
-        fillerWordCount: result.fillerWordCount || 0,
-        silenceGapCount: result.silenceGapCount || 0,
+        transcript: [],
+        detectedSpeakers: 0,
+        fillerWordCount: 0,
+        silenceGapCount: 0,
         sceneChangeCount: result.sceneChangeCount || 0,
         analyzedAt: new Date(),
       };
+    } else {
+      // For longer videos, process in chunks
+      const chunks = createChunks(frames, timestamps, MAX_FRAMES_PER_CHUNK);
+      const results: Partial<VideoAnalysis>[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkProgress = 60 + (i / chunks.length) * 35;
+        updateProgress(
+          "analyzing",
+          chunkProgress,
+          `Analyzing visual chunk ${i + 1} of ${chunks.length}...`
+        );
+
+        const result = await analyzeChunk(chunks[i], i, chunks.length, duration);
+        results.push(result);
+      }
+
+      visualAnalysis = mergeChunkResults(results, duration);
     }
 
-    // For longer videos, process in chunks
-    const chunks = createChunks(frames, timestamps, MAX_FRAMES_PER_CHUNK);
-    const results: Partial<VideoAnalysis>[] = [];
+    // Stage 4: Combine results
+    updateProgress("analyzing", 95, "Combining analysis results...");
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunkProgress = 50 + (i / chunks.length) * 45;
-      updateProgress(
-        "analyzing",
-        chunkProgress,
-        `Analyzing chunk ${i + 1} of ${chunks.length}...`
-      );
-
-      const result = await analyzeChunk(chunks[i], i, chunks.length, duration);
-      results.push(result);
-    }
+    const finalAnalysis = combineAnalysisResults(visualAnalysis, elevenLabsResult, duration);
 
     updateProgress("complete", 100, "Analysis complete");
 
-    return mergeChunkResults(results, duration);
+    return finalAnalysis;
   } catch (error) {
-    updateProgress(
-      "error",
-      0,
-      error instanceof Error ? error.message : "Analysis failed"
-    );
+    if (!(error instanceof Error && error.message.includes("ElevenLabs"))) {
+      updateProgress(
+        "error",
+        0,
+        error instanceof Error ? error.message : "Analysis failed"
+      );
+    }
     throw error;
   }
+}
+
+/**
+ * Combine visual analysis from Gemini with transcription from ElevenLabs
+ */
+function combineAnalysisResults(
+  visualAnalysis: VideoAnalysis,
+  elevenLabsResult: ElevenLabsTranscriptionResult | null,
+  duration: number
+): VideoAnalysis {
+  if (!elevenLabsResult) {
+    // No ElevenLabs result - return Gemini analysis as-is
+    return visualAnalysis;
+  }
+
+  // Convert ElevenLabs transcript to standard format
+  const transcript = convertToStandardTranscript(elevenLabsResult);
+
+  // Generate annotations from transcript for talking/silence/filler
+  const audioAnnotations = generateAnnotationsFromTranscript(transcript, duration);
+
+  // Convert ElevenLabs audio events to annotations
+  const audioEventAnnotations: Annotation[] = elevenLabsResult.audioEvents.map((event) => ({
+    id: nanoid(8),
+    type: event.type as Annotation["type"],
+    startTime: event.startTime,
+    endTime: event.endTime,
+    confidence: 0.9,
+    label: event.type,
+  }));
+
+  // Merge annotations: visual (scene changes) + audio (talking/silence/filler/music)
+  const visualOnlyAnnotations = visualAnalysis.annotations.filter(
+    (a) => a.type === "scene"
+  );
+
+  const allAnnotations = [
+    ...visualOnlyAnnotations,
+    ...audioAnnotations,
+    ...audioEventAnnotations,
+  ].sort((a, b) => a.startTime - b.startTime);
+
+  // Count stats from combined data
+  const fillerCount = transcript.filter((t) => t.isFiller).length;
+  const silenceCount = audioAnnotations.filter((a) => a.type === "silence").length;
+  const sceneCount = visualOnlyAnnotations.filter((a) => a.type === "scene").length;
+
+  return {
+    duration,
+    summary: visualAnalysis.summary,
+    annotations: allAnnotations,
+    transcript,
+    detectedSpeakers: elevenLabsResult.speakers.length || 1,
+    fillerWordCount: fillerCount,
+    silenceGapCount: silenceCount,
+    sceneChangeCount: sceneCount,
+    audioEvents: elevenLabsResult.audioEvents.map((e) => ({
+      type: e.type as AudioEvent["type"],
+      startTime: e.startTime,
+      endTime: e.endTime,
+    })),
+    analyzedAt: new Date(),
+  };
+}
+
+/**
+ * Generate talking/silence/filler annotations from transcript segments
+ */
+function generateAnnotationsFromTranscript(
+  transcript: TranscriptSegment[],
+  duration: number
+): Annotation[] {
+  const annotations: Annotation[] = [];
+
+  // Add talking annotations for each transcript segment
+  for (const segment of transcript) {
+    // Check if this is a filler segment
+    if (segment.isFiller || (segment.words && segment.words.some((w) => isFillerWord(w.word)))) {
+      annotations.push({
+        id: nanoid(8),
+        type: "filler",
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+        confidence: 0.9,
+        label: segment.text,
+      });
+    }
+
+    // Add talking annotation
+    annotations.push({
+      id: nanoid(8),
+      type: "talking",
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      confidence: 0.95,
+      label: segment.speaker || "Speaker",
+    });
+  }
+
+  // Find silence gaps (gaps > 0.5s between segments)
+  const sortedSegments = [...transcript].sort((a, b) => a.startTime - b.startTime);
+
+  // Check for silence at the beginning
+  if (sortedSegments.length > 0 && sortedSegments[0].startTime > 0.5) {
+    annotations.push({
+      id: nanoid(8),
+      type: "silence",
+      startTime: 0,
+      endTime: sortedSegments[0].startTime,
+      confidence: 0.9,
+      label: "Silence",
+    });
+  }
+
+  // Check for gaps between segments
+  for (let i = 0; i < sortedSegments.length - 1; i++) {
+    const gap = sortedSegments[i + 1].startTime - sortedSegments[i].endTime;
+    if (gap > 0.5) {
+      annotations.push({
+        id: nanoid(8),
+        type: "silence",
+        startTime: sortedSegments[i].endTime,
+        endTime: sortedSegments[i + 1].startTime,
+        confidence: 0.9,
+        label: "Silence",
+      });
+    }
+  }
+
+  // Check for silence at the end
+  if (sortedSegments.length > 0) {
+    const lastEnd = sortedSegments[sortedSegments.length - 1].endTime;
+    if (duration - lastEnd > 0.5) {
+      annotations.push({
+        id: nanoid(8),
+        type: "silence",
+        startTime: lastEnd,
+        endTime: duration,
+        confidence: 0.9,
+        label: "Silence",
+      });
+    }
+  }
+
+  return annotations;
 }
 
 /**

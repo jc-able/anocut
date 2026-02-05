@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useAIEditorStore } from "@/stores/ai-editor-store";
 import { useEditor } from "@/hooks/use-editor";
+import { hasElevenLabsKey } from "@/services/ai/elevenlabs";
 import { CommandTerminal } from "./command-terminal";
 import { AnnotationTimeline } from "./annotation-timeline";
 import { TranscriptPanel } from "./transcript-panel";
@@ -22,10 +23,13 @@ import {
   X,
   ChevronLeft,
   Play,
-  Pause,
   Zap,
   FileText,
   MessageSquare,
+  Mic,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 
 interface AIEditorWorkspaceProps {
@@ -35,13 +39,14 @@ interface AIEditorWorkspaceProps {
 export function AIEditorWorkspace({ onClose }: AIEditorWorkspaceProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("commands");
+  const [hasElevenLabs, setHasElevenLabs] = useState(false);
   const editor = useEditor();
 
   const {
     analysis,
     isAnalyzing,
     aiEdits,
-    hasApiKey,
+    hasApiKey: hasGoogleApiKey,
     startAnalysis,
     clearAnalysis,
     clearEdits,
@@ -51,6 +56,11 @@ export function AIEditorWorkspace({ onClose }: AIEditorWorkspaceProps) {
 
   const canUndo = useAIEditorStore((s) => s.undoStack.length > 0);
   const canRedo = useAIEditorStore((s) => s.redoStack.length > 0);
+
+  // Check for API keys on mount and when settings close
+  useEffect(() => {
+    setHasElevenLabs(hasElevenLabsKey());
+  }, [settingsOpen]);
 
   // Get current playhead time
   const currentTime = editor.playback.getCurrentTime();
@@ -66,6 +76,9 @@ export function AIEditorWorkspace({ onClose }: AIEditorWorkspaceProps) {
     const assets = editor.media.getAssets();
     return assets.find((asset) => asset.type === "video");
   }, [editor.media]);
+
+  // Check if both API keys are configured
+  const hasRequiredKeys = hasGoogleApiKey && hasElevenLabs;
 
   // Handle seeking from AI panel
   const handleSeek = useCallback(
@@ -246,15 +259,37 @@ export function AIEditorWorkspace({ onClose }: AIEditorWorkspaceProps) {
           {/* Analysis section - shown when no analysis yet */}
           {!analysis && !isAnalyzing && (
             <div className="flex-1 flex items-center justify-center p-8">
-              {!hasApiKey ? (
+              {!hasRequiredKeys ? (
                 <div className="text-center max-w-md">
                   <div className="size-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                    <Settings className="size-8 text-muted-foreground" />
+                    <AlertCircle className="size-8 text-muted-foreground" />
                   </div>
-                  <h3 className="text-xl font-semibold mb-2">Configure API Key</h3>
+                  <h3 className="text-xl font-semibold mb-2">API Keys Required</h3>
                   <p className="text-muted-foreground mb-4">
-                    To use AI-powered editing, you need to configure your Google AI API key.
+                    AI-powered editing requires two API keys to be configured:
                   </p>
+                  <div className="text-left bg-muted/50 rounded-lg p-4 mb-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {hasGoogleApiKey ? (
+                        <CheckCircle className="size-4 text-green-500" />
+                      ) : (
+                        <XCircle className="size-4 text-red-500" />
+                      )}
+                      <span className={hasGoogleApiKey ? "text-muted-foreground" : ""}>
+                        Google AI API Key <span className="text-xs text-muted-foreground">(visual analysis)</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {hasElevenLabs ? (
+                        <CheckCircle className="size-4 text-green-500" />
+                      ) : (
+                        <XCircle className="size-4 text-red-500" />
+                      )}
+                      <span className={hasElevenLabs ? "text-muted-foreground" : ""}>
+                        ElevenLabs API Key <span className="text-xs text-muted-foreground">(audio transcription)</span>
+                      </span>
+                    </div>
+                  </div>
                   <Button onClick={() => setSettingsOpen(true)}>
                     <Settings className="size-4 mr-2" />
                     Open Settings
