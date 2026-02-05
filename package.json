@@ -17,6 +17,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "better-auth": "^1.4.15",
