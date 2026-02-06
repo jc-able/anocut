@@ -1,0 +1,32 @@
+{
+  "name": "anocut",
+  "packageManager": "bun@1.2.18",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "turbo run dev --filter=@anocut/web",
+    "build:web": "turbo run build --filter=@anocut/web",
+    "dev:tools": "turbo run dev --filter=@anocut/tools",
+    "build:tools": "turbo run build --filter=@anocut/tools",
+    "start:tools": "turbo run start --filter=@anocut/tools",
+    "lint:web": "biome lint apps/web/src --max-diagnostics=1000",
+    "lint:web:fix": "biome lint apps/web/src --write --max-diagnostics=1000",
+    "format:web": "biome format apps/web/src/services/renderer --write --max-diagnostics=1000",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "better-auth": "^1.4.15",
+    "next": "^16.1.3"
+  },
+  "devDependencies": {
+    "turbo": "^2.7.5",
+    "typescript": "5.8.3"
+  },
+  "trustedDependencies": [
+    "@tailwindcss/oxide"
+  ]
+}

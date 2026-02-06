@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/utils/ui";
 import { FileText, User, AlertCircle } from "lucide-react";
+import type { TranscriptWord } from "@/types/ai";
 
 interface TranscriptPanelProps {
   className?: string;
@@ -19,13 +20,48 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+// Check if a word is currently being spoken
+function isWordActive(word: TranscriptWord, currentTime: number): boolean {
+  return currentTime >= word.startTime && currentTime < word.endTime;
+}
+
+// Word component with click-to-seek and highlight
+function Word({
+  word,
+  isActive,
+  isCut,
+  onSeek,
+}: {
+  word: TranscriptWord;
+  isActive: boolean;
+  isCut: boolean;
+  onSeek?: (time: number) => void;
+}) {
+  return (
+    <span
+      className={cn(
+        "cursor-pointer transition-all duration-100 rounded-sm px-0.5 -mx-0.5",
+        "hover:bg-muted/50",
+        isActive && "bg-primary/30 font-medium",
+        isCut && "line-through opacity-40"
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSeek?.(word.startTime);
+      }}
+    >
+      {word.word}
+    </span>
+  );
+}
+
 export function TranscriptPanel({
   className,
   currentTime = 0,
   onSeek,
 }: TranscriptPanelProps) {
   const { analysis, aiEdits } = useAIEditorStore();
-  const activeRef = useRef<HTMLButtonElement>(null);
+  const activeRef = useRef<HTMLDivElement>(null);
 
   // Find segments that are marked for cutting
   const cutRanges = useMemo(() => {
@@ -34,8 +70,8 @@ export function TranscriptPanel({
       .map((edit) => ({ start: edit.startTime, end: edit.endTime }));
   }, [aiEdits]);
 
-  // Check if a segment is within a cut range
-  const isSegmentCut = (startTime: number, endTime: number): boolean => {
+  // Check if a time range is within a cut range
+  const isTimeCut = (startTime: number, endTime: number): boolean => {
     return cutRanges.some(
       (range) =>
         (startTime >= range.start && startTime < range.end) ||
@@ -119,7 +155,7 @@ export function TranscriptPanel({
   return (
     <div className={cn("flex flex-col h-full", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-3 border-b">
         <div className="flex items-center gap-2 text-muted-foreground">
           <FileText className="size-4" />
           <span className="text-sm font-medium">Transcript</span>
@@ -137,17 +173,15 @@ export function TranscriptPanel({
       </div>
 
       {/* Stats */}
-      <div className="flex gap-4 px-4 py-2 text-xs text-muted-foreground border-b bg-muted/20">
+      <div className="flex gap-3 px-3 py-1.5 text-[10px] text-muted-foreground border-b bg-muted/20">
         {analysis.fillerWordCount > 0 && (
           <span>
-            {analysis.fillerWordCount} filler word
-            {analysis.fillerWordCount !== 1 ? "s" : ""}
+            {analysis.fillerWordCount} filler{analysis.fillerWordCount !== 1 ? "s" : ""}
           </span>
         )}
         {analysis.silenceGapCount > 0 && (
           <span>
-            {analysis.silenceGapCount} silence gap
-            {analysis.silenceGapCount !== 1 ? "s" : ""}
+            {analysis.silenceGapCount} silence{analysis.silenceGapCount !== 1 ? "s" : ""}
           </span>
         )}
         {cutRanges.length > 0 && (
@@ -159,12 +193,12 @@ export function TranscriptPanel({
 
       {/* Transcript Content */}
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+        <div className="p-3 space-y-3">
           {groupedSegments.map((group, groupIdx) => (
             <div key={groupIdx} className="space-y-1">
               {/* Speaker header */}
               {group.speaker && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-1">
                   <User className="size-3" />
                   <span className="font-medium">{group.speaker}</span>
                 </div>
@@ -174,48 +208,82 @@ export function TranscriptPanel({
               <div className="space-y-0.5">
                 {group.segments.map((segment) => {
                   const isActive = segment.id === activeSegmentId;
-                  const isCut = isSegmentCut(segment.startTime, segment.endTime);
+                  const isSegmentCut = isTimeCut(segment.startTime, segment.endTime);
+                  const hasWords = segment.words && segment.words.length > 0;
 
                   return (
-                    <button
+                    <div
                       key={segment.id}
                       ref={isActive ? activeRef : null}
                       className={cn(
-                        "w-full text-left px-2 py-1 rounded text-sm transition-colors",
-                        "hover:bg-muted/50",
-                        isActive && "bg-primary/10 border-l-2 border-primary",
-                        isCut && "line-through opacity-50",
-                        segment.isFiller && "text-yellow-500"
+                        "px-2 py-1.5 rounded text-sm transition-colors",
+                        isActive && "bg-primary/5 border-l-2 border-primary",
+                        isSegmentCut && "opacity-50",
+                        segment.isFiller && "border-l-2 border-yellow-500"
                       )}
-                      onClick={() => onSeek?.(segment.startTime)}
                     >
-                      <span className="text-[10px] text-muted-foreground mr-2 font-mono">
+                      {/* Timestamp */}
+                      <span
+                        className="text-[10px] text-muted-foreground mr-2 font-mono cursor-pointer hover:text-foreground"
+                        onClick={() => onSeek?.(segment.startTime)}
+                      >
                         {formatTime(segment.startTime)}
                       </span>
-                      <span
-                        className={cn(
-                          segment.isFiller && "bg-yellow-500/20 px-1 rounded"
-                        )}
-                      >
-                        {segment.text}
-                      </span>
+
+                      {/* Words with individual highlighting */}
+                      {hasWords ? (
+                        <span className="leading-relaxed">
+                          {segment.words!.map((word, wordIdx) => {
+                            const wordIsActive = isWordActive(word, currentTime);
+                            const wordIsCut = isTimeCut(word.startTime, word.endTime);
+
+                            return (
+                              <span key={`${segment.id}-${wordIdx}`}>
+                                <Word
+                                  word={word}
+                                  isActive={wordIsActive}
+                                  isCut={wordIsCut}
+                                  onSeek={onSeek}
+                                />
+                                {wordIdx < segment.words!.length - 1 && " "}
+                              </span>
+                            );
+                          })}
+                        </span>
+                      ) : (
+                        // Fallback: show segment text without word-level highlighting
+                        <span
+                          className={cn(
+                            "cursor-pointer hover:text-foreground",
+                            isSegmentCut && "line-through",
+                            segment.isFiller && "text-yellow-600"
+                          )}
+                          onClick={() => onSeek?.(segment.startTime)}
+                        >
+                          {segment.text}
+                        </span>
+                      )}
+
+                      {/* Filler badge */}
                       {segment.isFiller && (
                         <Badge
                           variant="outline"
-                          className="ml-2 text-[10px] py-0 h-4 text-yellow-500 border-yellow-500/50"
+                          className="ml-2 text-[9px] py-0 h-3.5 text-yellow-600 border-yellow-500/50"
                         >
                           filler
                         </Badge>
                       )}
-                      {isCut && (
+
+                      {/* Cut badge */}
+                      {isSegmentCut && (
                         <Badge
                           variant="outline"
-                          className="ml-2 text-[10px] py-0 h-4 text-red-500 border-red-500/50"
+                          className="ml-2 text-[9px] py-0 h-3.5 text-red-500 border-red-500/50"
                         >
                           cut
                         </Badge>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
